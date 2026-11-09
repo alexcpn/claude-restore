@@ -97,3 +97,7 @@ python3 -m unittest -v
 ```
 
 The tests use temporary directories and mock the terminal and dialog, so they do not touch your real sessions.
+
+## License
+
+[Apache License 2.0](LICENSE)
