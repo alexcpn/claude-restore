@@ -4,3 +4,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # One PR for all actions, so codeql-action init and analyze move together.
+    groups:
+      actions:
+        patterns: ["*"]
