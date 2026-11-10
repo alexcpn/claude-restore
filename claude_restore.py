@@ -38,7 +38,7 @@ SERVICE = "claude-restore-snapshot.service"
 # record only the survivors. Sessions stay listed this long after they vanish.
 GRACE_SECONDS = 150
 KEEP_SNAPSHOTS = 10
-PICKER_LIMIT = 10
+PICKER_LIMIT = 15
 
 
 def boot_id():

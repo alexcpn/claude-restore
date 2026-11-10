@@ -43,7 +43,7 @@ If the app does not appear when you search for it, log out and back in.
 
 ## Usage
 
-Press **Super**, type **restore**, and press Enter. The list shows the 10 most recent sessions that are not running, with their last-active time, title and folder.
+Press **Super**, type **restore**, and press Enter. The list shows the 15 most recent sessions that are not running, with their last-active time, title and folder.
 
 From a terminal:
 
