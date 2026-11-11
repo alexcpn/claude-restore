@@ -265,13 +265,101 @@ def recent_sessions(limit=PICKER_LIMIT):
     return found
 
 
-def picker_command():
-    return [
-        "zenity", "--list", "--checklist", "--title=Claude Restore",
-        "--text=Select the sessions to reopen:", "--width=1000", "--height=480",
-        "--column=", "--column=Last active", "--column=Session", "--column=Folder",
-        "--column=Id", "--hide-column=5", "--print-column=5", "--separator=\n",
-    ]
+PICKER_HINT = "↑ ↓ move    Space tick    Enter restore    Esc cancel"
+
+
+def load_gtk():
+    """Import GTK 3 only when a dialog is shown, so the rest works headless."""
+    import gi
+
+    # GTK 4 may be installed too, so pin both, or Gdk can load as 4.0.
+    gi.require_version("Gdk", "3.0")
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gdk, Gtk, Pango
+
+    if not Gtk.init_check(sys.argv)[0]:
+        raise RuntimeError("cannot open the display")
+    return Gdk, Gtk, Pango
+
+
+def build_picker(rows):
+    """Return (dialog, tree, store) for rows of (when, title, folder, id)."""
+    Gdk, Gtk, Pango = load_gtk()
+    dialog = Gtk.Dialog(title="Claude Restore")
+    dialog.add_buttons("_Cancel", Gtk.ResponseType.CANCEL, "_Restore", Gtk.ResponseType.OK)
+    dialog.set_default_response(Gtk.ResponseType.OK)
+    dialog.set_default_size(1000, 560)
+    dialog.set_position(Gtk.WindowPosition.CENTER)
+
+    store = Gtk.ListStore(bool, str, str, str, str)
+    for row in rows:
+        store.append([False, *row])
+    tree = Gtk.TreeView(model=store)
+    tree.set_enable_search(False)  # typing must not open a search box over the list
+
+    def flip(path):
+        row = store.get_iter(path)
+        store.set_value(row, 0, not store.get_value(row, 0))
+
+    toggle = Gtk.CellRendererToggle()
+    toggle.connect("toggled", lambda _renderer, path: flip(path))
+    tree.append_column(Gtk.TreeViewColumn("", toggle, active=0))
+    for index, heading in enumerate(("Last active", "Session", "Folder"), start=1):
+        text = Gtk.CellRendererText(ellipsize=Pango.EllipsizeMode.END)
+        column = Gtk.TreeViewColumn(heading, text, text=index)
+        column.set_resizable(True)
+        column.set_expand(index == 2)
+        tree.append_column(column)
+
+    def on_key(_tree, event):
+        if event.keyval == Gdk.KEY_space:
+            path, _ = tree.get_cursor()
+            if path is not None:
+                flip(path)
+            return True
+        if event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter, Gdk.KEY_ISO_Enter):
+            dialog.response(Gtk.ResponseType.OK)
+            return True
+        return False
+
+    tree.connect("key-press-event", on_key)
+    scroller = Gtk.ScrolledWindow(vexpand=True)
+    scroller.add(tree)
+    box = dialog.get_content_area()
+    box.set_spacing(8)
+    box.set_border_width(10)
+    box.pack_start(Gtk.Label(label=PICKER_HINT, xalign=0), False, False, 0)
+    box.pack_start(scroller, True, True, 0)
+    dialog.show_all()
+    if rows:
+        tree.set_cursor(Gtk.TreePath(0))
+    tree.grab_focus()
+    return dialog, tree, store
+
+
+def picked_ids(tree, store):
+    """The ticked ids, or the highlighted row's id if nothing is ticked."""
+    ticked = [row[4] for row in store if row[0]]
+    if ticked:
+        return ticked
+    path, _ = tree.get_cursor()
+    return [store[path][4]] if path is not None else []
+
+
+def run_picker(rows):
+    """Show the dialog; return the chosen ids, or [] when cancelled."""
+    _, Gtk, _ = load_gtk()
+    dialog, tree, store = build_picker(rows)
+    chosen = picked_ids(tree, store) if dialog.run() == Gtk.ResponseType.OK else []
+    dialog.destroy()
+    return chosen
+
+
+def show_message(text):
+    _, Gtk, _ = load_gtk()
+    dialog = Gtk.MessageDialog(text=text, buttons=Gtk.ButtonsType.OK, title="Claude Restore")
+    dialog.run()
+    dialog.destroy()
 
 
 def choose_sessions(sessions):
@@ -279,14 +367,8 @@ def choose_sessions(sessions):
     rows = []
     for s in sessions:
         when = time.strftime("%a %d %b %H:%M", time.localtime(s["lastActive"]))
-        # zenity takes one cell per stdin line, so a cell must not hold a newline.
-        rows += ["FALSE", when, " ".join(s["title"].split()), s["cwd"], s["sessionId"]]
-    result = subprocess.run(
-        picker_command(), input="\n".join(rows) + "\n", capture_output=True, text=True
-    )
-    if result.returncode != 0:
-        return []
-    chosen = set(result.stdout.split())
+        rows.append((when, " ".join(s["title"].split()), s["cwd"], s["sessionId"]))
+    chosen = set(run_picker(rows))
     return [s for s in sessions if s["sessionId"] in chosen]
 
 
@@ -295,11 +377,10 @@ def pick():
     try:
         sessions = recent_sessions()
         if not sessions:
-            subprocess.run(["zenity", "--info", "--title=Claude Restore",
-                            "--text=No sessions to restore."])
+            show_message("No sessions to restore.")
             return 0
         chosen = choose_sessions(sessions)
-    except OSError as error:
+    except (ImportError, ValueError, RuntimeError) as error:
         log(f"FAILED to show the picker: {error}")
         return 1
     if not chosen:

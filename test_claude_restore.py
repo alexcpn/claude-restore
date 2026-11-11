@@ -154,31 +154,37 @@ class RestoreTest(unittest.TestCase):
         ids = [s["sessionId"] for s in cr.recent_sessions()]
         self.assertEqual(ids, [f"s{i}" for i in range(cr.PICKER_LIMIT)])
 
-    def test_title_cannot_break_picker_rows(self):
-        self.add_transcript("a", title="--two\nlines")
-        done = subprocess.CompletedProcess([], 1, stdout="")
-        with mock.patch.object(cr.subprocess, "run", return_value=done) as run:
+    def test_picker_gets_one_line_titles_and_ids(self):
+        self.add_transcript("a", title="two\n  lines")
+        with mock.patch.object(cr, "run_picker", return_value=[]) as picker:
             cr.pick()
-        self.assertNotIn("--two", " ".join(run.call_args.args[0]))
-        self.assertEqual(len(run.call_args.kwargs["input"].splitlines()), 5)
+        (row,) = picker.call_args.args[0]
+        self.assertEqual(row[1:], ("two lines", str(self.work), "a"))
 
-    def test_pick_reopens_only_ticked_sessions(self):
+    def test_pick_reopens_only_chosen_sessions(self):
         self.add_transcript("a")
         self.add_transcript("b")
-        calls = [subprocess.CompletedProcess([], 0, stdout="b\n"), None]
-        with mock.patch.object(cr.subprocess, "run", side_effect=calls) as run:
+        with mock.patch.object(cr, "run_picker", return_value=["b"]), \
+                mock.patch.object(cr.subprocess, "run") as run:
             self.assertEqual(cr.pick(), 0)
-        script = run.call_args_list[1].args[0][4]
+        script = run.call_args.args[0][4]
         self.assertIn("--resume b;", script)
         self.assertNotIn("--resume a;", script)
 
     def test_pick_cancel_opens_nothing(self):
         self.add_transcript("a")
-        done = subprocess.CompletedProcess([], 1, stdout="")
-        with mock.patch.object(cr.subprocess, "run", return_value=done) as run:
+        with mock.patch.object(cr, "run_picker", return_value=[]), \
+                mock.patch.object(cr.subprocess, "run") as run:
             self.assertEqual(cr.pick(), 0)
-        run.assert_called_once()
+        run.assert_not_called()
 
+    def test_pick_without_display_is_reported(self):
+        self.add_transcript("a")
+        error = RuntimeError("cannot open the display")
+        with mock.patch.object(cr, "run_picker", side_effect=error), \
+                mock.patch.object(cr.subprocess, "run") as run:
+            self.assertEqual(cr.pick(), 1)
+        run.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()

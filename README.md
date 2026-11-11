@@ -5,12 +5,12 @@ Bring your [Claude Code](https://claude.com/claude-code) terminal sessions back 
 - **Pick from a list:** press Super, type `restore`, tick the sessions you want, and they reopen as tabs in one new terminal window.
 - **Automatic after a reboot:** sessions that were open when the machine went down reopen at login.
 
-It is a single Python file with no third-party dependencies.
+It is a single Python file. The only dependency beyond Python is the GTK 3 bindings that GNOME desktops already ship.
 
 ## Requirements
 
 - Linux with a GNOME-style desktop and `gnome-terminal`
-- `zenity` for the checkbox dialog
+- PyGObject with GTK 3 for the picker dialog; most GNOME desktops include it
 - systemd user services
 - Python 3.8 or newer
 - Claude Code, with `claude` on your `PATH` or at `~/.local/bin/claude`
@@ -18,7 +18,7 @@ It is a single Python file with no third-party dependencies.
 Developed and tested on Pop!_OS (GNOME, X11). On Debian or Ubuntu, the desktop packages can be installed with:
 
 ```bash
-sudo apt install gnome-terminal zenity
+sudo apt install gnome-terminal python3-gi gir1.2-gtk-3.0
 ```
 
 ## Install
@@ -44,6 +44,15 @@ If the app does not appear when you search for it, log out and back in.
 ## Usage
 
 Press **Super**, type **restore**, and press Enter. The list shows the 15 most recent sessions that are not running, with their last-active time, title and folder.
+
+| Key | Action |
+| --- | --- |
+| ↑ ↓ | Move between sessions |
+| Space | Tick or untick the highlighted session |
+| Enter | Reopen the ticked sessions, or the highlighted one if none are ticked |
+| Esc | Close without reopening anything |
+
+You can also tick boxes with the mouse and click **Restore**.
 
 From a terminal:
 
